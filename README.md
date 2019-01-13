@@ -4,7 +4,7 @@
 
 Ecrire un code python permettant de recréer un jeu équivalent au jeu PacMan. Une solution opérationnelle avec une interface graphique à l'aide de tkinter devra être réalisée, sans les fantômes chasseurs pour commencer, que l'on pourra ajouter ensuite
 
-Productions attendues :
+**Productions attendues :**
   
                           - Structures de données utilisées pour représenter le jeu
                           - Algorithme de génération du jeu
