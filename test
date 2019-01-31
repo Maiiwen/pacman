@@ -1,0 +1,269 @@
+from tkinter import Tk, Canvas, Label, Frame, RIGHT, LEFT, IntVar
+from numpy import ones, ndenumerate, loadtxt 
+from random import choice 
+ 
+CASE_SIZE = 20
+BALL_RADIUS = 8 
+GAME_SPEED = 100
+COIN_SIZE = 5
+ 
+MOTIONS = {
+            'Up':   (0, -1),
+            'Down': (0, 1),
+            'Left': (-1, 0),
+            'Right':(1, 0)
+           }
+ 
+class Appli():
+    """Score + Vie + Level + Victoire"""
+ 
+    score = 0
+    life = 3
+    current_level = 1
+    fruit_counter = None 
+    object_map = None
+    run_status = True 
+ 
+    def score_up():
+        if Appli.run_status:
+            Appli.score += 1
+            Appli.fruit_counter -= 1
+            object_map.score_label_content.set(Appli.score)
+            Appli.check_victory()
+ 
+    def check_victory():
+        if Appli.fruit_counter == 0:
+            Appli.current_level += 1 
+            Appli.object_map.next_level() 
+ 
+    def lose_life():
+        Appli.life -= 1
+        Appli.run_status = False   
+        object_map.life_label_content.set(Appli.life)
+        if Appli.life == 0:     # Fin du jeu
+            Appli.object_map.reset_map_table() #Refait slt tableau, pas le graphe
+            Appli.object_map.failure()         
+ 
+class Map():
+    """GUI mur + GUI fruits + GUI Game over + next level"""
+ 
+    def __init__(self,root):
+        self.load_map()
+        self.root = root
+        self.init_game_graphics()
+ 
+    def init_game_graphics(self):
+        """Canvas + Wall + Fruit""" 
+        lar = self.map_game.shape[0]*CASE_SIZE
+        hau = self.map_game.shape[1]*CASE_SIZE  
+ 
+        main_frame = Frame(self.root,width=lar+100,height=hau+100 )
+        main_frame.pack()       
+ 
+        self.can_game = Canvas(main_frame,width=lar,height=hau,bg="black")
+        self.can_game.pack(padx=10,pady=10)
+        self.can_game.focus_set() 
+ 
+        self.life_label_content = IntVar()
+        self.life_label_content.set(Appli.life)
+        self.life_label = Label(main_frame,textvariable=self.life_label_content)  
+        Label(main_frame,text='Life:').pack(side=LEFT)         
+        self.life_label.pack(side=LEFT)
+ 
+        self.score_label_content = IntVar()
+        self.score_label_content.set(Appli.score)
+        self.score_label = Label(main_frame,textvariable=self.score_label_content)  
+        self.score_label.pack(side=RIGHT)   
+        Label(main_frame,text='Score:').pack(side=RIGHT)         
+ 
+        self.reset_map_grahic()
+ 
+    def reset_map_grahic(self):             
+        self.fruit_list = self.map_game.shape[0] * self.map_game.shape[1] * [0]
+        self.can_game.delete("construct")
+ 
+        for (x,y), value in ndenumerate(self.map_game):
+ 
+            if self.map_game[x,y] == 1:
+                self.can_game.create_rectangle(y*CASE_SIZE,x*CASE_SIZE,
+                                           (y+1)*CASE_SIZE,(x+1)*CASE_SIZE,
+                                          outline='blue',tags='construct')  #Tags pour les détruire ensuite au passage de niveau. On aurait pu faire une liste d'objet rectangle)
+            elif self.map_game[x,y] == 0 or self.map_game[x,y] == 2:
+ 
+                self.fruit_list[x*self.map_game.shape[1]+y] = self.cercle(CASE_SIZE*(y+1/2),CASE_SIZE*(x+1/2),
+                       COIN_SIZE,'yellow','construct') 
+ 
+    def cercle(self,x, y, r, coul ='black', tag ='None'):
+        boule = self.can_game.create_oval(x-r, y-r, x+r, y+r, fill=coul, tags = tag) 
+        return boule
+ 
+    def load_map(self):
+        self.map_game = loadtxt(str(Appli.current_level) + '.txt')
+        self.reset_map_table()
+ 
+    def reset_map_table(self):
+        fruit_counter = 0
+        for (x,y), value in ndenumerate(self.map_game):
+            if self.map_game[x,y] == 0 or self.map_game[x,y] == 2: # or == 2, cas reset partie ?
+                self.map_game[x,y] = 2    
+                fruit_counter += 1 
+        Appli.fruit_counter = fruit_counter
+ 
+    def check_fruit(self,pos):  
+        if self.map_game[pos[0],pos[1]] == 2:
+            self.map_game[pos[0],pos[1]] = 0
+            self.update_fruit(pos)
+            Appli.score_up()
+ 
+    def update_fruit(self,pos):
+        x = pos[0]
+        y = pos[1]
+        self.can_game.delete(self.fruit_list[x*self.map_game.shape[1]+y])
+        self.fruit_list[x*self.map_game.shape[1]+y] = 0 
+ 
+    def failure(self):
+        self.can_game.delete('all')
+        self.can_game.after(400) 
+        self.can_game.create_text(CASE_SIZE*self.map_game.shape[0]/2,CASE_SIZE*self.map_game.shape[1]/2,
+                                  fill="red",font="Times 15 italic bold",text="Game Over")
+ 
+    def next_level(self):
+        self.load_map()
+        self.reset_map_grahic()
+        self.reset_map_table()
+ 
+    def get_map(self):
+        return self.map_game
+ 
+class Walking_unity():
+    """ Parent de pacman et ghost"""
+    """vérif carte + ball dessin + reset_position + update GUI ball""" 
+ 
+    def __init__(self,object_map,color):
+        self.root = object_map.root
+        self.object_map = object_map   
+        self.can_game = object_map.can_game        
+        self.graphic_ball = self.ball_drawing(color)
+ 
+    def check_map(self):
+        map_game = self.object_map.get_map() 
+        row = self.ball_pos[0] + self.vector[1] 
+        col = self.ball_pos[1] + self.vector[0]
+        if col >= 0 and col < map_game.shape[1] and \
+            row >= 0 and row < map_game.shape[0]and \
+            map_game[row,col] != 1:
+                return True 
+ 
+    def ball_drawing(self,color):
+        row = self.ball_pos[0]
+        col = self.ball_pos[1]
+        return self.cercle(col*CASE_SIZE+CASE_SIZE/2,row*CASE_SIZE+CASE_SIZE/2, BALL_RADIUS,color) 
+ 
+    def update_graphic_ball(self):
+        self.can_game.move(self.graphic_ball,self.vector[0]*CASE_SIZE,self.vector[1]*CASE_SIZE)       
+ 
+    def cercle(self,x, y, r, coul ='black'):
+        boule = self.can_game.create_oval(x-r, y-r, x+r, y+r, fill=coul) 
+        return boule
+ 
+    def reset_position(self):      
+        #Mal fait: ne concerne que les ghosts
+        row = self.ball_pos_init[0]
+        col = self.ball_pos_init[1]
+        self.ball_pos = self.ball_pos_init
+        self.can_game.delete(self.graphic_ball)
+        del self.graphic_ball
+        if Appli.life != 0: # Without this, the ghost is recreated eventhough the game over 
+            self.graphic_ball = self.ball_drawing('red')           
+            Appli.run_status = True 
+ 
+    def set_pos(self):
+        self.ball_pos = [self.ball_pos[0]+self.vector[1],self.ball_pos[1]+self.vector[0]]  
+ 
+    def get_pos(self):
+        return self.ball_pos  
+ 
+class Pacman(Walking_unity):
+    """Event binder + Move_ball manuel"""    
+ 
+    def __init__(self,object_map):  
+        color = 'yellow'
+        self.position_initial()  
+        self.vector = None        
+ 
+        Walking_unity.__init__(self,object_map,color)
+ 
+        self.init_binder_key_ball()
+        self.move_ball_manual()        
+ 
+    def init_binder_key_ball(self):    
+        for key in MOTIONS:
+            self.can_game.bind('<%s>' % key, self.keyboard_event)  
+ 
+    def keyboard_event(self,event):
+        self.vector = MOTIONS[event.keysym]
+ 
+    def position_initial(self):
+        self.ball_pos = [0,0]     
+        self.ball_pos_init = self.ball_pos 
+ 
+    def move_ball_manual(self): 
+        #Utiliser le polymorphisme sur le movement aurait peut etre été intéressant
+            if self.vector and self.check_map():
+                self.set_pos()   
+                self.object_map.check_fruit(self.ball_pos)
+                self.update_graphic_ball()
+            self.can_game.after(GAME_SPEED, self.move_ball_manual)   
+ 
+class Ghost(Walking_unity):
+    """Verif position pacman + Move_ball auto"""   
+ 
+    def __init__(self,object_map,ball_pos,object_pacman):
+ 
+        color = 'red'        
+        self.object_pacman = object_pacman
+        self.ball_pos = ball_pos 
+        self.ball_pos_init = ball_pos
+        Walking_unity.__init__(self,object_map,color)        
+ 
+        self.counter_previous_position = 0
+        self.previous_pacman_position  = self.object_pacman.ball_pos
+        self.previous_ghost_position = ball_pos
+ 
+        self.vector = (-1, 0)    
+        self.move_ball_auto()        
+ 
+    def check_pacman(self):
+        self.counter_previous_position +=1
+ 
+        if self.object_pacman.get_pos() == self.get_pos() or \
+        (self.previous_ghost_position == self.object_pacman.get_pos() \
+        and self.previous_pacman_position == self.get_pos()):
+            Appli.lose_life()
+            self.reset_position()
+ 
+        self.previous_ghost_position = self.get_pos()
+        self.previous_pacman_position = self.object_pacman.get_pos()             
+ 
+    def move_ball_auto(self):
+        #Utiliser le polymorphisme sur le movement aurait peut etre été intéressant
+        if Appli.run_status:
+            if self.check_map():        
+                self.set_pos()                                     
+                self.update_graphic_ball()  
+                self.check_pacman()
+            else:
+                self.vector = choice(list(MOTIONS.values()))
+            self.can_game.after(GAME_SPEED, self.move_ball_auto) 
+ 
+# --- Main ---
+ 
+root = Tk()
+object_map = Map(root)
+Appli.object_map = object_map
+object_pacman = Pacman(object_map)
+        #object_map.object_list.append(object_pacman)
+object_ghost1 = Ghost(object_map,(9,9),object_pacman)     
+object_ghost2 = Ghost(object_map,(7,9),object_pacman)
+#object_ghost3 = Ghost(object_map,(6,9),object_pacman)
+root.mainloop()
